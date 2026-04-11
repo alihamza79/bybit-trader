@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { createBybitClient, getWalletBalance } from '@/lib/bybit';
-import { withRetry } from '@/lib/utils/retry';
+import { withRetry, extractErrorMessage } from '@/lib/utils/retry';
 
 export async function GET(): Promise<NextResponse> {
   try {
@@ -36,7 +36,7 @@ export async function GET(): Promise<NextResponse> {
         results.push({
           account_id: account.id,
           balance: null,
-          error: err instanceof Error ? err.message : 'Failed to fetch balance',
+          error: extractErrorMessage(err),
         });
       }
     }

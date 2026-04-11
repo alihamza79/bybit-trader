@@ -11,7 +11,7 @@ import {
   placeOrder,
 } from '@/lib/bybit';
 import { delay } from '@/lib/utils/delay';
-import { withRetry } from '@/lib/utils/retry';
+import { withRetry, extractErrorMessage } from '@/lib/utils/retry';
 import { TRADE_DELAY_MS } from '@/config/constants';
 import type { AccountExecutionResult } from '@/types';
 
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           balance: accountBalance,
         };
       } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        const errorMessage = extractErrorMessage(err);
         result = {
           account_id: account.id,
           account_name: account.name,

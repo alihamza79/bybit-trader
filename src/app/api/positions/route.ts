@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { createBybitClient, getPositions, closePosition, setPositionTpSl } from '@/lib/bybit';
 import { delay } from '@/lib/utils/delay';
-import { withRetry } from '@/lib/utils/retry';
+import { withRetry, extractErrorMessage } from '@/lib/utils/retry';
 import { TRADE_DELAY_MS } from '@/config/constants';
 
 export async function GET(): Promise<NextResponse> {
@@ -48,7 +48,7 @@ export async function GET(): Promise<NextResponse> {
           positions,
         });
       } catch (err: unknown) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        const errorMsg = extractErrorMessage(err);
         console.error(`[positions] Failed for ${account.name}:`, errorMsg);
         allPositions.push({
           account_id: account.id,
@@ -107,8 +107,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to update TP/SL';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: extractErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -152,7 +151,6 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ success: true, orderId });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to close position';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: extractErrorMessage(err) }, { status: 500 });
   }
 }

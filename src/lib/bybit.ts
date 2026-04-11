@@ -1,5 +1,6 @@
 import { RestClientV5, type OrderParamsV5 } from 'bybit-api';
 import type { TradeSide, OrderType } from '@/types';
+import { extractErrorMessage } from '@/lib/utils/retry';
 
 type BybitConfig = {
   apiKey: string;
@@ -11,6 +12,14 @@ type OrderResult = {
   quantity: string;
 };
 
+async function bybitCall<T>(fn: () => Promise<T>, context: string): Promise<T> {
+  try {
+    return await fn();
+  } catch (err: unknown) {
+    throw new Error(`[${context}] ${extractErrorMessage(err)}`);
+  }
+}
+
 export function createBybitClient(config: BybitConfig): RestClientV5 {
   return new RestClientV5({
     key: config.apiKey,
@@ -21,7 +30,10 @@ export function createBybitClient(config: BybitConfig): RestClientV5 {
 }
 
 export async function getWalletBalance(client: RestClientV5): Promise<number> {
-  const response = await client.getWalletBalance({ accountType: 'UNIFIED' });
+  const response = await bybitCall(
+    () => client.getWalletBalance({ accountType: 'UNIFIED' }),
+    'getWalletBalance',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Failed to get balance: ${response.retMsg}`);
@@ -51,12 +63,15 @@ export async function setLeverage(
   symbol: string,
   leverage: number,
 ): Promise<void> {
-  const response = await client.setLeverage({
-    category: 'linear',
-    symbol,
-    buyLeverage: String(leverage),
-    sellLeverage: String(leverage),
-  });
+  const response = await bybitCall(
+    () => client.setLeverage({
+      category: 'linear',
+      symbol,
+      buyLeverage: String(leverage),
+      sellLeverage: String(leverage),
+    }),
+    'setLeverage',
+  );
 
   // 110043 = leverage not modified (already set to this value)
   if (response.retCode !== 0 && response.retCode !== 110043) {
@@ -68,10 +83,13 @@ export async function getSymbolInfo(
   client: RestClientV5,
   symbol: string,
 ): Promise<{ minQty: number; qtyStep: number; tickSize: number }> {
-  const response = await client.getInstrumentsInfo({
-    category: 'linear',
-    symbol,
-  });
+  const response = await bybitCall(
+    () => client.getInstrumentsInfo({
+      category: 'linear',
+      symbol,
+    }),
+    'getSymbolInfo',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Symbol not found: ${response.retMsg}`);
@@ -96,7 +114,10 @@ export async function getLastPrice(
   client: RestClientV5,
   symbol: string,
 ): Promise<number> {
-  const response = await client.getTickers({ category: 'linear', symbol });
+  const response = await bybitCall(
+    () => client.getTickers({ category: 'linear', symbol }),
+    'getLastPrice',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Failed to get price: ${response.retMsg}`);
@@ -213,7 +234,10 @@ export async function placeOrder(
 
   console.log('[bybit] Submitting order:', JSON.stringify(orderParams));
 
-  const response = await client.submitOrder(orderParams);
+  const response = await bybitCall(
+    () => client.submitOrder(orderParams),
+    'placeOrder',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Order failed: ${response.retMsg} (code: ${response.retCode})`);
@@ -251,7 +275,10 @@ export async function getPositions(
     ...(symbol ? { symbol } : {}),
   };
 
-  const response = await client.getPositionInfo(params);
+  const response = await bybitCall(
+    () => client.getPositionInfo(params),
+    'getPositions',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Failed to get positions: ${response.retMsg}`);
@@ -280,14 +307,17 @@ export async function closePosition(
 ): Promise<string> {
   const closeSide = params.side === 'Buy' ? 'Sell' : 'Buy';
 
-  const response = await client.submitOrder({
-    category: 'linear',
-    symbol: params.symbol,
-    side: closeSide,
-    orderType: 'Market',
-    qty: params.size,
-    reduceOnly: true,
-  });
+  const response = await bybitCall(
+    () => client.submitOrder({
+      category: 'linear',
+      symbol: params.symbol,
+      side: closeSide,
+      orderType: 'Market',
+      qty: params.size,
+      reduceOnly: true,
+    }),
+    'closePosition',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Close failed: ${response.retMsg}`);
@@ -323,7 +353,10 @@ export async function getOpenOrders(
     ...(symbol ? { symbol } : {}),
   };
 
-  const response = await client.getActiveOrders(params);
+  const response = await bybitCall(
+    () => client.getActiveOrders(params),
+    'getOpenOrders',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Failed to get orders: ${response.retMsg}`);
@@ -354,13 +387,16 @@ export async function setPositionTpSl(
     takeProfit?: string;
   },
 ): Promise<void> {
-  const response = await client.setTradingStop({
-    category: 'linear',
-    symbol: params.symbol,
-    positionIdx: params.positionIdx,
-    ...(params.stopLoss !== undefined ? { stopLoss: params.stopLoss } : {}),
-    ...(params.takeProfit !== undefined ? { takeProfit: params.takeProfit } : {}),
-  });
+  const response = await bybitCall(
+    () => client.setTradingStop({
+      category: 'linear',
+      symbol: params.symbol,
+      positionIdx: params.positionIdx,
+      ...(params.stopLoss !== undefined ? { stopLoss: params.stopLoss } : {}),
+      ...(params.takeProfit !== undefined ? { takeProfit: params.takeProfit } : {}),
+    }),
+    'setPositionTpSl',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Set TP/SL failed: ${response.retMsg} (code: ${response.retCode})`);
@@ -378,15 +414,18 @@ export async function amendOpenOrder(
     takeProfit?: string;
   },
 ): Promise<void> {
-  const response = await client.amendOrder({
-    category: 'linear',
-    symbol: params.symbol,
-    orderId: params.orderId,
-    ...(params.qty !== undefined ? { qty: params.qty } : {}),
-    ...(params.price !== undefined ? { price: params.price } : {}),
-    ...(params.stopLoss !== undefined ? { stopLoss: params.stopLoss } : {}),
-    ...(params.takeProfit !== undefined ? { takeProfit: params.takeProfit } : {}),
-  });
+  const response = await bybitCall(
+    () => client.amendOrder({
+      category: 'linear',
+      symbol: params.symbol,
+      orderId: params.orderId,
+      ...(params.qty !== undefined ? { qty: params.qty } : {}),
+      ...(params.price !== undefined ? { price: params.price } : {}),
+      ...(params.stopLoss !== undefined ? { stopLoss: params.stopLoss } : {}),
+      ...(params.takeProfit !== undefined ? { takeProfit: params.takeProfit } : {}),
+    }),
+    'amendOrder',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Amend order failed: ${response.retMsg} (code: ${response.retCode})`);
@@ -397,11 +436,14 @@ export async function cancelOrder(
   client: RestClientV5,
   params: { symbol: string; orderId: string },
 ): Promise<void> {
-  const response = await client.cancelOrder({
-    category: 'linear',
-    symbol: params.symbol,
-    orderId: params.orderId,
-  });
+  const response = await bybitCall(
+    () => client.cancelOrder({
+      category: 'linear',
+      symbol: params.symbol,
+      orderId: params.orderId,
+    }),
+    'cancelOrder',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Cancel failed: ${response.retMsg}`);
@@ -417,7 +459,10 @@ export async function cancelAllOrders(
     ...(symbol ? { symbol } : { settleCoin: 'USDT' }),
   };
 
-  const response = await client.cancelAllOrders(params);
+  const response = await bybitCall(
+    () => client.cancelAllOrders(params),
+    'cancelAllOrders',
+  );
 
   if (response.retCode !== 0) {
     throw new Error(`Cancel all failed: ${response.retMsg}`);

@@ -9,10 +9,29 @@ const RETRYABLE_PATTERNS = [
   'socket hang up',
   'network',
   'timeout',
+  'fetch failed',
 ] as const;
 
+export function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object') {
+    const obj = err as Record<string, unknown>;
+    if (typeof obj.message === 'string') return obj.message;
+    if (typeof obj.msg === 'string') return obj.msg;
+    if (typeof obj.retMsg === 'string') return obj.retMsg;
+    if (typeof obj.error === 'string') return obj.error;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return '[unknown error object]';
+    }
+  }
+  return String(err);
+}
+
 function isRetryable(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
+  const msg = extractErrorMessage(err);
   return RETRYABLE_PATTERNS.some((p) => msg.toLowerCase().includes(p.toLowerCase()));
 }
 
@@ -32,7 +51,7 @@ export async function withRetry<T>(
       if (attempt < maxAttempts && isRetryable(err)) {
         const waitMs = baseDelayMs * Math.pow(2, attempt - 1);
         console.warn(
-          `[retry] Attempt ${attempt}/${maxAttempts} failed (${err instanceof Error ? err.message : err}), retrying in ${waitMs}ms...`,
+          `[retry] Attempt ${attempt}/${maxAttempts} failed (${extractErrorMessage(err)}), retrying in ${waitMs}ms...`,
         );
         await delay(waitMs);
         continue;

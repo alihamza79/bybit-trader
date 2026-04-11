@@ -11,7 +11,7 @@ import {
   getWalletBalance,
 } from '@/lib/bybit';
 import { delay } from '@/lib/utils/delay';
-import { withRetry } from '@/lib/utils/retry';
+import { withRetry, extractErrorMessage } from '@/lib/utils/retry';
 import { TRADE_DELAY_MS } from '@/config/constants';
 
 export async function GET(): Promise<NextResponse> {
@@ -57,7 +57,7 @@ export async function GET(): Promise<NextResponse> {
           orders,
         });
       } catch (err: unknown) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        const errorMsg = extractErrorMessage(err);
         console.error(`[orders] Failed for ${account.name}:`, errorMsg);
         allOrders.push({
           account_id: account.id,
@@ -158,8 +158,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ success: true, synced_qty: syncedQty });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to amend order';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: extractErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -206,7 +205,6 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to cancel order';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: extractErrorMessage(err) }, { status: 500 });
   }
 }
