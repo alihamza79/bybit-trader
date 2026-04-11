@@ -1,0 +1,48 @@
+import { NextResponse } from 'next/server';
+import { createServerSupabase } from '@/lib/supabase/server';
+import { createBybitClient, getWalletBalance } from '@/lib/bybit';
+import { withRetry } from '@/lib/utils/retry';
+
+export async function GET(): Promise<NextResponse> {
+  try {
+    const supabase = await createServerSupabase();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { data: accounts, error } = await supabase
+      .from('bybit_accounts')
+      .select('id, api_key, api_secret')
+      .eq('user_id', user.id)
+      .eq('is_active', true);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    const results = [];
+
+    for (const account of accounts ?? []) {
+      try {
+        const client = createBybitClient({ apiKey: account.api_key, apiSecret: account.api_secret });
+        const balance = await withRetry(() => getWalletBalance(client));
+        results.push({
+          account_id: account.id,
+          balance: balance.toFixed(2),
+        });
+      } catch (err: unknown) {
+        results.push({
+          account_id: account.id,
+          balance: null,
+          error: err instanceof Error ? err.message : 'Failed to fetch balance',
+        });
+      }
+    }
+
+    return NextResponse.json(results);
+  } catch {
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
