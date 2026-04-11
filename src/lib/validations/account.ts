@@ -6,17 +6,17 @@ export const accountSchema = z
     api_key: z.string().min(1, 'API key is required'),
     api_secret: z.string().min(1, 'API secret is required'),
     risk_type: z.enum(['percent', 'amount']),
-    risk_percent: z.number().min(0.1).max(100).optional(),
-    risk_amount: z.number().min(1).max(1_000_000).optional(),
+    risk_percent: z.number().min(0.1).max(100).optional().nullable(),
+    risk_amount: z.number().min(1).max(1_000_000).optional().nullable(),
   })
   .refine(
     (data) =>
-      data.risk_type !== 'percent' || (data.risk_percent !== undefined && data.risk_percent > 0),
+      data.risk_type !== 'percent' || (data.risk_percent != null && data.risk_percent > 0),
     { message: 'Risk percentage is required', path: ['risk_percent'] },
   )
   .refine(
     (data) =>
-      data.risk_type !== 'amount' || (data.risk_amount !== undefined && data.risk_amount > 0),
+      data.risk_type !== 'amount' || (data.risk_amount != null && data.risk_amount > 0),
     { message: 'Risk amount is required', path: ['risk_amount'] },
   );
 

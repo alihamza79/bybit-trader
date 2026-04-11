@@ -4,15 +4,15 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useExecuteTrade } from '@/hooks/useTrades';
-import { useAccounts } from '@/hooks/useAccounts';
+import { useAccounts, useUpdateAccount } from '@/hooks/useAccounts';
 import { tradeSchema, type TradeFormData } from '@/lib/validations/trade';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { DEFAULT_SYMBOL } from '@/config/constants';
-import type { TradeResponse, Account, RiskType, RiskOverride } from '@/types';
-import { Zap, CheckCircle, XCircle, Pencil, Check, X, RotateCcw } from 'lucide-react';
+import type { TradeResponse, Account, RiskType } from '@/types';
+import { Zap, CheckCircle, XCircle, Pencil, Check, X } from 'lucide-react';
 
 function InlineRiskOverrideEditor({
   defaultType,
@@ -95,8 +95,8 @@ export default function TradePage(): React.JSX.Element {
   );
 
   const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
-  const [riskOverrides, setRiskOverrides] = useState<Record<string, RiskOverride>>({});
   const [editingRiskId, setEditingRiskId] = useState<string | null>(null);
+  const updateAccountMutation = useUpdateAccount();
 
   const effectiveSelected = useMemo(() => {
     if (selectedIds === null) {
@@ -129,20 +129,15 @@ export default function TradePage(): React.JSX.Element {
     }
   }
 
-  function setRiskOverrideValue(accountId: string, type: RiskType, value: number): void {
-    setRiskOverrides((prev) => ({
-      ...prev,
-      [accountId]: { risk_type: type, risk_value: value },
-    }));
-    setEditingRiskId(null);
-  }
-
-  function clearRiskOverride(accountId: string): void {
-    setRiskOverrides((prev) => {
-      const next = { ...prev };
-      delete next[accountId];
-      return next;
+  function saveRisk(accountId: string, type: RiskType, value: number): void {
+    updateAccountMutation.mutate({
+      id: accountId,
+      data: {
+        risk_type: type,
+        ...(type === 'amount' ? { risk_amount: value, risk_percent: null } : { risk_percent: value }),
+      },
     });
+    setEditingRiskId(null);
   }
 
   const {
@@ -173,13 +168,6 @@ export default function TradePage(): React.JSX.Element {
 
     setTradeResult(null);
 
-    const overridesForSelected: Record<string, RiskOverride> = {};
-    for (const id of effectiveSelected) {
-      if (riskOverrides[id]) {
-        overridesForSelected[id] = riskOverrides[id];
-      }
-    }
-
     try {
       const result = await executeMutation.mutateAsync({
         symbol: data.symbol,
@@ -190,9 +178,6 @@ export default function TradePage(): React.JSX.Element {
         stop_loss: data.stop_loss,
         take_profit: data.take_profit,
         account_ids: Array.from(effectiveSelected),
-        risk_overrides: Object.keys(overridesForSelected).length > 0
-          ? overridesForSelected
-          : undefined,
       });
       setTradeResult(result);
     } catch (err: unknown) {
@@ -206,13 +191,6 @@ export default function TradePage(): React.JSX.Element {
       return `${Number(account.risk_percent)}%`;
     }
     return `$${Number(account.risk_amount).toLocaleString()}`;
-  }
-
-  function formatOverride(override: RiskOverride): string {
-    if (override.risk_type === 'percent') {
-      return `${override.risk_value}%`;
-    }
-    return `$${override.risk_value.toLocaleString()}`;
   }
 
   function getAccountDefaultRiskType(account: Account): RiskType {
@@ -260,7 +238,6 @@ export default function TradePage(): React.JSX.Element {
             <div className="space-y-2">
               {activeAccounts.map((account) => {
                 const isChecked = effectiveSelected.has(account.id);
-                const override = riskOverrides[account.id];
                 const isEditingThis = editingRiskId === account.id;
 
                 return (
@@ -285,34 +262,19 @@ export default function TradePage(): React.JSX.Element {
                     <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.preventDefault()}>
                       {isEditingThis ? (
                         <InlineRiskOverrideEditor
-                          defaultType={override?.risk_type ?? getAccountDefaultRiskType(account)}
-                          defaultValue={override?.risk_value ?? getAccountDefaultRiskValue(account)}
-                          onSave={(type, value) => setRiskOverrideValue(account.id, type, value)}
+                          defaultType={getAccountDefaultRiskType(account)}
+                          defaultValue={getAccountDefaultRiskValue(account)}
+                          onSave={(type, value) => saveRisk(account.id, type, value)}
                           onCancel={() => setEditingRiskId(null)}
                         />
                       ) : (
                         <>
-                          {override ? (
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs text-muted line-through">{formatRisk(account)}</span>
-                              <span className="text-xs font-medium text-primary">{formatOverride(override)}</span>
-                              <button
-                                type="button"
-                                onClick={() => clearRiskOverride(account.id)}
-                                className="text-muted hover:text-danger transition-colors"
-                                title="Reset to default"
-                              >
-                                <RotateCcw size={10} />
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted">{formatRisk(account)}</span>
-                          )}
+                          <span className="text-xs text-muted">{formatRisk(account)}</span>
                           <button
                             type="button"
                             onClick={() => setEditingRiskId(account.id)}
                             className="text-muted hover:text-primary transition-colors"
-                            title="Override risk for this trade"
+                            title="Edit risk"
                           >
                             <Pencil size={10} />
                           </button>
