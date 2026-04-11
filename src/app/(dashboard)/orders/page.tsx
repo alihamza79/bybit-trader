@@ -147,6 +147,7 @@ export default function OrdersPage(): React.JSX.Element {
 
   const totalOrders = accountOrders?.reduce((sum, a) => sum + a.orders.length, 0) ?? 0;
   const accountsWithOrders = accountOrders?.filter((a) => a.orders.length > 0) ?? [];
+  const accountsWithErrors = accountOrders?.filter((a) => a.error && a.orders.length === 0) ?? [];
 
   function toggleAccount(accountId: string): void {
     setCollapsed((prev) => ({ ...prev, [accountId]: !prev[accountId] }));
@@ -265,10 +266,21 @@ export default function OrdersPage(): React.JSX.Element {
         </Card>
       )}
 
-      {accountOrders && totalOrders === 0 && (
+      {accountOrders && totalOrders === 0 && accountsWithErrors.length === 0 && (
         <Card className="text-center text-sm text-muted">
           No open orders across any account.
         </Card>
+      )}
+
+      {accountsWithErrors.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {accountsWithErrors.map((acct) => (
+            <Card key={acct.account_id} className="border-l-4 border-l-danger text-sm">
+              <span className="font-medium">{acct.account_name}</span>
+              <span className="text-danger ml-2">{acct.error}</span>
+            </Card>
+          ))}
+        </div>
       )}
 
       {accountsWithOrders.length > 0 && (

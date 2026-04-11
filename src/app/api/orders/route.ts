@@ -37,6 +37,7 @@ export async function GET(): Promise<NextResponse> {
       account_id: string;
       account_name: string;
       orders: Awaited<ReturnType<typeof getOpenOrders>>;
+      error?: string;
     }> = [];
 
     for (let i = 0; i < (accounts?.length ?? 0); i++) {
@@ -49,19 +50,20 @@ export async function GET(): Promise<NextResponse> {
           apiSecret: account.api_secret,
         });
 
-        const orders = await withRetry(() => getOpenOrders(client));
-        if (orders.length > 0) {
-          allOrders.push({
-            account_id: account.id,
-            account_name: account.name,
-            orders,
-          });
-        }
-      } catch {
+        const orders = await withRetry(() => getOpenOrders(client), 2, 500);
+        allOrders.push({
+          account_id: account.id,
+          account_name: account.name,
+          orders,
+        });
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[orders] Failed for ${account.name}:`, errorMsg);
         allOrders.push({
           account_id: account.id,
           account_name: account.name,
           orders: [],
+          error: errorMsg,
         });
       }
     }

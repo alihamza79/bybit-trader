@@ -4,6 +4,7 @@ export type AccountPositions = {
   account_id: string;
   account_name: string;
   positions: ReadonlyArray<PositionInfo>;
+  error?: string;
 };
 
 export async function fetchPositions(): Promise<ReadonlyArray<AccountPositions>> {

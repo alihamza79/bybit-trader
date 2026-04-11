@@ -4,6 +4,7 @@ export type AccountOrders = {
   account_id: string;
   account_name: string;
   orders: ReadonlyArray<OpenOrderInfo>;
+  error?: string;
 };
 
 export async function fetchOpenOrders(): Promise<ReadonlyArray<AccountOrders>> {

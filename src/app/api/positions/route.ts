@@ -28,6 +28,7 @@ export async function GET(): Promise<NextResponse> {
       account_id: string;
       account_name: string;
       positions: Awaited<ReturnType<typeof getPositions>>;
+      error?: string;
     }> = [];
 
     for (let i = 0; i < (accounts?.length ?? 0); i++) {
@@ -40,19 +41,20 @@ export async function GET(): Promise<NextResponse> {
           apiSecret: account.api_secret,
         });
 
-        const positions = await withRetry(() => getPositions(client));
-        if (positions.length > 0) {
-          allPositions.push({
-            account_id: account.id,
-            account_name: account.name,
-            positions,
-          });
-        }
+        const positions = await withRetry(() => getPositions(client), 2, 500);
+        allPositions.push({
+          account_id: account.id,
+          account_name: account.name,
+          positions,
+        });
       } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[positions] Failed for ${account.name}:`, errorMsg);
         allPositions.push({
           account_id: account.id,
           account_name: account.name,
           positions: [],
+          error: errorMsg,
         });
       }
     }

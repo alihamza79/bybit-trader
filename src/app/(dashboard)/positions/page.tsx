@@ -85,6 +85,7 @@ export default function PositionsPage(): React.JSX.Element {
 
   const totalPositions = accountPositions?.reduce((sum, a) => sum + a.positions.length, 0) ?? 0;
   const accountsWithPositions = accountPositions?.filter((a) => a.positions.length > 0) ?? [];
+  const accountsWithErrors = accountPositions?.filter((a) => a.error && a.positions.length === 0) ?? [];
 
   function posKey(accountId: string, symbol: string, side: string): string {
     return `${accountId}-${symbol}-${side}`;
@@ -167,10 +168,21 @@ export default function PositionsPage(): React.JSX.Element {
         </Card>
       )}
 
-      {accountPositions && totalPositions === 0 && (
+      {accountPositions && totalPositions === 0 && accountsWithErrors.length === 0 && (
         <Card className="text-center text-sm text-muted">
           No open positions across any account.
         </Card>
+      )}
+
+      {accountsWithErrors.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {accountsWithErrors.map((acct) => (
+            <Card key={acct.account_id} className="border-l-4 border-l-danger text-sm">
+              <span className="font-medium">{acct.account_name}</span>
+              <span className="text-danger ml-2">{acct.error}</span>
+            </Card>
+          ))}
+        </div>
       )}
 
       {accountsWithPositions.length > 0 && (
