@@ -1,39 +1,91 @@
 #!/bin/bash
 set -e
 
-echo "=== Bybit Multi-Account Trader ==="
-echo ""
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+PORT=4123
+PID_FILE="$APP_DIR/.server.pid"
+LOG_FILE="$APP_DIR/.server.log"
 
-# Check Node.js
+is_running() {
+  [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+case "${1:-start}" in
+  stop)
+    if is_running; then
+      kill "$(cat "$PID_FILE")" 2>/dev/null
+      rm -f "$PID_FILE"
+      echo "Stopped."
+    else
+      echo "Not running."
+      rm -f "$PID_FILE"
+    fi
+    exit 0
+    ;;
+  status)
+    if is_running; then
+      echo "Running at http://localhost:$PORT (PID $(cat "$PID_FILE"))"
+    else
+      echo "Not running."
+      rm -f "$PID_FILE"
+    fi
+    exit 0
+    ;;
+  start) ;;
+  *)
+    echo "Usage: ./start.sh [start|stop|status]"
+    exit 1
+    ;;
+esac
+
+echo "=== Bybit Multi-Account Trader ==="
+
 if ! command -v node &>/dev/null; then
-  echo "❌ Node.js not found. Install it from https://nodejs.org (v20+)"
+  echo "Node.js not found. Install from https://nodejs.org (v20+)"
   exit 1
 fi
 
-# Check pnpm
 if ! command -v pnpm &>/dev/null; then
-  echo "📦 Installing pnpm..."
+  echo "Installing pnpm..."
   npm install -g pnpm
 fi
 
-# Check .env.local
-if [ ! -f .env.local ]; then
-  echo "❌ Missing .env.local file!"
-  echo ""
-  echo "Create it with your Supabase credentials:"
-  echo "  cp .env.example .env.local"
-  echo "  Then edit .env.local with your values"
+if [ ! -f "$APP_DIR/.env.local" ]; then
+  echo "Missing .env.local — run: cp .env.example .env.local and fill in values"
   exit 1
 fi
 
-echo "📦 Installing dependencies..."
-pnpm install
+if is_running; then
+  echo "Already running at http://localhost:$PORT (PID $(cat "$PID_FILE"))"
+  exit 0
+fi
 
-echo "🔨 Building app..."
+cd "$APP_DIR"
+
+echo "Installing dependencies..."
+pnpm install --silent
+
+echo "Building..."
 pnpm build
 
-echo ""
-echo "✅ Starting app at http://localhost:3000"
-echo "   Press Ctrl+C to stop"
-echo ""
-pnpm start
+echo "Starting on port $PORT..."
+PORT=$PORT HOSTNAME=0.0.0.0 nohup node .next/standalone/server.js > "$LOG_FILE" 2>&1 &
+echo $! > "$PID_FILE"
+
+sleep 2
+
+if is_running; then
+  echo ""
+  echo "Running at http://localhost:$PORT"
+  echo ""
+  echo "Commands:"
+  echo "  ./start.sh stop     — stop the server"
+  echo "  ./start.sh status   — check if running"
+  echo "  ./start.sh start    — start (default)"
+  echo "  Logs: tail -f .server.log"
+else
+  echo "Failed to start. Check:"
+  echo "  cat $LOG_FILE"
+  rm -f "$PID_FILE"
+  exit 1
+fi
