@@ -10,7 +10,7 @@ is_running() {
   [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
 }
 
-case "${1:-start}" in
+case "${1:-toggle}" in
   stop)
     if is_running; then
       kill "$(cat "$PID_FILE")" 2>/dev/null
@@ -31,9 +31,18 @@ case "${1:-start}" in
     fi
     exit 0
     ;;
+  toggle)
+    if is_running; then
+      kill "$(cat "$PID_FILE")" 2>/dev/null
+      rm -f "$PID_FILE"
+      echo "Stopped."
+      exit 0
+    fi
+    ;;
   start) ;;
   *)
     echo "Usage: ./start.sh [start|stop|status]"
+    echo "       ./start.sh          (toggle: start if stopped, stop if running)"
     exit 1
     ;;
 esac
@@ -69,7 +78,7 @@ echo "Building..."
 pnpm build
 
 echo "Starting on port $PORT..."
-PORT=$PORT HOSTNAME=0.0.0.0 nohup node .next/standalone/server.js > "$LOG_FILE" 2>&1 &
+nohup npx next start -p $PORT > "$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 
 sleep 2
@@ -79,9 +88,8 @@ if is_running; then
   echo "Running at http://localhost:$PORT"
   echo ""
   echo "Commands:"
-  echo "  ./start.sh stop     — stop the server"
-  echo "  ./start.sh status   — check if running"
-  echo "  ./start.sh start    — start (default)"
+  echo "  ./start.sh           — toggle (start/stop)"
+  echo "  ./start.sh status    — check if running"
   echo "  Logs: tail -f .server.log"
 else
   echo "Failed to start. Check:"
