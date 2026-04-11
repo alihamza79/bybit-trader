@@ -3,6 +3,7 @@ import type { Account, AccountInsert } from '@/types';
 export type AccountBalance = {
   account_id: string;
   balance: string | null;
+  margin_balance: string | null;
   error?: string;
 };
 

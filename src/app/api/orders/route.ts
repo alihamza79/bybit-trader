@@ -94,6 +94,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       sync_risk?: boolean;
       order_price?: string;
       order_side?: string;
+      order_sl?: string;
     };
 
     if (!body.order_id) {
@@ -118,17 +119,30 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
     let syncedQty: string | undefined;
 
-    if (body.sync_risk && body.stop_loss && body.order_price && body.order_side) {
-      const entryPrice = parseFloat(body.order_price);
-      const newSl = parseFloat(body.stop_loss);
+    if (body.sync_risk && body.order_side) {
+      let entryPrice: number | undefined;
+      let slPrice: number | undefined;
 
-      if (entryPrice > 0 && newSl > 0) {
-        const [balance, symbolInfo] = await withRetry(() =>
+      if (body.price) {
+        entryPrice = parseFloat(body.price);
+      } else if (body.order_price) {
+        entryPrice = parseFloat(body.order_price);
+      }
+
+      if (body.stop_loss) {
+        slPrice = parseFloat(body.stop_loss);
+      } else if (body.order_sl) {
+        slPrice = parseFloat(body.order_sl);
+      }
+
+      if (entryPrice && entryPrice > 0 && slPrice && slPrice > 0) {
+        const [walletInfo, symbolInfo] = await withRetry(() =>
           Promise.all([
             getWalletBalance(client),
             getSymbolInfo(client, body.symbol),
           ]),
         );
+        const balance = walletInfo.availableBalance;
 
         const riskType = (account.risk_type as 'percent' | 'amount') || 'amount';
 
@@ -139,7 +153,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           riskAmountUsd: account.risk_amount,
           leverage: 1,
           entryPrice,
-          stopLoss: newSl,
+          stopLoss: slPrice,
           side: body.order_side as 'Buy' | 'Sell',
           qtyStep: symbolInfo.qtyStep,
           minQty: symbolInfo.minQty,

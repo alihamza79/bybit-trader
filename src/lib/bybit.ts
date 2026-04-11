@@ -32,7 +32,12 @@ export function createBybitClient(config: BybitConfig): RestClientV5 {
   });
 }
 
-export async function getWalletBalance(client: RestClientV5): Promise<number> {
+export type WalletBalanceInfo = {
+  availableBalance: number;
+  marginBalance: number;
+};
+
+export async function getWalletBalance(client: RestClientV5): Promise<WalletBalanceInfo> {
   const response = await bybitCall(
     () => client.getWalletBalance({ accountType: 'UNIFIED' }),
     'getWalletBalance',
@@ -47,18 +52,18 @@ export async function getWalletBalance(client: RestClientV5): Promise<number> {
     throw new Error('No account found');
   }
 
-  // In Unified Trading Account (UTA), totalAvailableBalance is the total
-  // margin available across all coins — this is what determines position sizing.
-  const rawBalance = account.totalAvailableBalance || '0';
-  const balance = parseFloat(rawBalance);
+  const rawAvailable = account.totalAvailableBalance || '0';
+  const rawMargin = account.totalMarginBalance || '0';
+  const availableBalance = parseFloat(rawAvailable);
+  const marginBalance = parseFloat(rawMargin);
 
-  if (isNaN(balance) || balance <= 0) {
+  if (isNaN(availableBalance) || availableBalance <= 0) {
     throw new Error(
-      `Insufficient balance (got: ${rawBalance}). Make sure the demo account has funds.`,
+      `Insufficient balance (got: ${rawAvailable}). Make sure the demo account has funds.`,
     );
   }
 
-  return balance;
+  return { availableBalance, marginBalance };
 }
 
 export async function setLeverage(
@@ -365,20 +370,22 @@ export async function getOpenOrders(
     throw new Error(`Failed to get orders: ${response.retMsg}`);
   }
 
-  return (response.result.list ?? []).map((o) => ({
-    orderId: String(o.orderId ?? ''),
-    symbol: String(o.symbol ?? ''),
-    side: String(o.side ?? ''),
-    orderType: String(o.orderType ?? ''),
-    price: String(o.price ?? '0'),
-    qty: String(o.qty ?? '0'),
-    leavesQty: String(o.leavesQty ?? '0'),
-    cumExecQty: String(o.cumExecQty ?? '0'),
-    stopLoss: String(o.stopLoss ?? ''),
-    takeProfit: String(o.takeProfit ?? ''),
-    createdTime: String(o.createdTime ?? ''),
-    orderStatus: String(o.orderStatus ?? ''),
-  }));
+  return (response.result.list ?? [])
+    .filter((o) => o.orderStatus !== 'Untriggered')
+    .map((o) => ({
+      orderId: String(o.orderId ?? ''),
+      symbol: String(o.symbol ?? ''),
+      side: String(o.side ?? ''),
+      orderType: String(o.orderType ?? ''),
+      price: String(o.price ?? '0'),
+      qty: String(o.qty ?? '0'),
+      leavesQty: String(o.leavesQty ?? '0'),
+      cumExecQty: String(o.cumExecQty ?? '0'),
+      stopLoss: String(o.stopLoss ?? ''),
+      takeProfit: String(o.takeProfit ?? ''),
+      createdTime: String(o.createdTime ?? ''),
+      orderStatus: String(o.orderStatus ?? ''),
+    }));
 }
 
 export async function setPositionTpSl(

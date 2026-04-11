@@ -330,8 +330,16 @@ export default function AccountsPage(): React.JSX.Element {
                       <span>Key: {account.api_key.slice(0, 8)}...{account.api_key.slice(-4)}</span>
 
                       {bal && bal.balance && (
-                        <span className="font-medium text-success">
-                          Balance: ${parseFloat(bal.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <span className="font-medium text-foreground">
+                          <span className="text-muted font-normal">Margin:</span>{' '}
+                          <span className="text-primary">
+                            ${bal.margin_balance ? parseFloat(bal.margin_balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                          </span>
+                          <span className="mx-1.5 text-card-border">|</span>
+                          <span className="text-muted font-normal">Available:</span>{' '}
+                          <span className="text-success">
+                            ${parseFloat(bal.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
                         </span>
                       )}
                       {bal && bal.error && (

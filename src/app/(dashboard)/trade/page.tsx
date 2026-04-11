@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useExecuteTrade } from '@/hooks/useTrades';
-import { useAccounts, useUpdateAccount } from '@/hooks/useAccounts';
+import { useAccounts, useAccountBalances, useUpdateAccount } from '@/hooks/useAccounts';
 import { tradeSchema, type TradeFormData } from '@/lib/validations/trade';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -12,7 +12,9 @@ import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { DEFAULT_SYMBOL } from '@/config/constants';
 import type { TradeResponse, Account, RiskType } from '@/types';
-import { Zap, CheckCircle, XCircle, Pencil, Check, X } from 'lucide-react';
+import type { AccountBalance } from '@/lib/api/accounts';
+import { Zap, CheckCircle, XCircle, Pencil, Check, X, Wallet, RefreshCw } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 function InlineRiskOverrideEditor({
   defaultType,
@@ -97,6 +99,30 @@ export default function TradePage(): React.JSX.Element {
   const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
   const [editingRiskId, setEditingRiskId] = useState<string | null>(null);
   const updateAccountMutation = useUpdateAccount();
+  const queryClient = useQueryClient();
+
+  const [balancesEnabled, setBalancesEnabled] = useState(false);
+  const { data: balancesData, isLoading: loadingBalances, isRefetching: refetchingBalances } = useAccountBalances(balancesEnabled);
+
+  const balances = useMemo(() => {
+    const map: Record<string, AccountBalance> = {};
+    if (balancesData) {
+      for (const b of balancesData) {
+        map[b.account_id] = b;
+      }
+    }
+    return map;
+  }, [balancesData]);
+
+  const isBalanceLoading = loadingBalances || refetchingBalances;
+
+  function handleFetchBalances(): void {
+    if (balancesEnabled) {
+      queryClient.invalidateQueries({ queryKey: ['account-balances'] });
+    } else {
+      setBalancesEnabled(true);
+    }
+  }
 
   const effectiveSelected = useMemo(() => {
     if (selectedIds === null) {
@@ -223,13 +249,28 @@ export default function TradePage(): React.JSX.Element {
         <Card>
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium">Select Accounts</span>
-            <button
-              type="button"
-              onClick={toggleAll}
-              className="text-xs text-primary hover:text-primary-hover transition-colors"
-            >
-              {allSelected ? 'Deselect All' : 'Select All'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleFetchBalances}
+                disabled={isBalanceLoading || !activeAccounts.length}
+                className="flex items-center gap-1 text-xs text-primary hover:text-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {balancesEnabled ? (
+                  <RefreshCw size={12} className={isBalanceLoading ? 'animate-spin' : ''} />
+                ) : (
+                  <Wallet size={12} />
+                )}
+                {isBalanceLoading ? 'Loading...' : balancesEnabled ? 'Refresh' : 'Fetch Balances'}
+              </button>
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="text-xs text-primary hover:text-primary-hover transition-colors"
+              >
+                {allSelected ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
           </div>
 
           {activeAccounts.length === 0 ? (
@@ -239,6 +280,7 @@ export default function TradePage(): React.JSX.Element {
               {activeAccounts.map((account) => {
                 const isChecked = effectiveSelected.has(account.id);
                 const isEditingThis = editingRiskId === account.id;
+                const bal = balances[account.id];
 
                 return (
                   <label
@@ -256,7 +298,25 @@ export default function TradePage(): React.JSX.Element {
                       className="h-4 w-4 rounded border-input-border text-primary accent-primary"
                     />
                     <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium">{account.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{account.name}</span>
+                      </div>
+                      {bal && bal.balance && (
+                        <div className="flex items-center gap-2 text-[10px] mt-0.5">
+                          <span className="text-muted">M:</span>
+                          <span className="text-primary font-medium">
+                            ${bal.margin_balance ? parseFloat(bal.margin_balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                          </span>
+                          <span className="text-card-border">|</span>
+                          <span className="text-muted">Avl:</span>
+                          <span className="text-success font-medium">
+                            ${parseFloat(bal.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {bal && bal.error && (
+                        <p className="text-[10px] text-danger mt-0.5">{bal.error}</p>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.preventDefault()}>

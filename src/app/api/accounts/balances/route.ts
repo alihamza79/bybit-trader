@@ -27,10 +27,11 @@ export async function GET(): Promise<NextResponse> {
     for (const account of accounts ?? []) {
       try {
         const client = createBybitClient({ apiKey: account.api_key, apiSecret: account.api_secret });
-        const balance = await withRetry(() => getWalletBalance(client));
+        const walletInfo = await withRetry(() => getWalletBalance(client));
         results.push({
           account_id: account.id,
-          balance: balance.toFixed(2),
+          balance: walletInfo.availableBalance.toFixed(2),
+          margin_balance: walletInfo.marginBalance.toFixed(2),
         });
       } catch (err: unknown) {
         results.push({

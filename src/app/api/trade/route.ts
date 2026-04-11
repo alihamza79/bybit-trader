@@ -93,7 +93,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           apiSecret: account.api_secret,
         });
 
-        const [balance, symbolInfo, lastPrice] = await withRetry(() =>
+        const [walletInfo, symbolInfo, lastPrice] = await withRetry(() =>
           Promise.all([
             getWalletBalance(client),
             getSymbolInfo(client, symbol),
@@ -101,6 +101,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           ]),
         );
 
+        const balance = walletInfo.availableBalance;
         accountBalance = balance.toFixed(2);
 
         await withRetry(() => setLeverage(client, symbol, leverage));
