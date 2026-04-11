@@ -21,11 +21,16 @@ async function bybitCall<T>(fn: () => Promise<T>, context: string): Promise<T> {
 }
 
 export function createBybitClient(config: BybitConfig): RestClientV5 {
+  const baseUrl = process.env.BYBIT_BASE_URL;
+
+  console.log('[bybit] Creating client, BYBIT_BASE_URL:', baseUrl ?? '(not set, using default api-demo.bybit.com)');
+
   return new RestClientV5({
     key: config.apiKey,
     secret: config.apiSecret,
     testnet: false,
     demoTrading: true,
+    ...(baseUrl ? { baseUrl } : {}),
   });
 }
 
