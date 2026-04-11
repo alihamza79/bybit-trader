@@ -129,7 +129,7 @@ export default function TradePage(): React.JSX.Element {
     }
   }
 
-  function setRiskOverride(accountId: string, type: RiskType, value: number): void {
+  function setRiskOverrideValue(accountId: string, type: RiskType, value: number): void {
     setRiskOverrides((prev) => ({
       ...prev,
       [accountId]: { risk_type: type, risk_value: value },
@@ -226,17 +226,23 @@ export default function TradePage(): React.JSX.Element {
     return account.risk_amount;
   }
 
-  return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div>
-        <div className="mb-6">
-          <h1 className="text-xl font-bold">Execute Trade</h1>
-          <p className="text-sm text-muted">
-            Place a trade across {selectedCount} of {activeAccounts.length} active account{activeAccounts.length !== 1 ? 's' : ''}
-          </p>
-        </div>
+  const successCount = tradeResult?.results.filter((r) => r.status === 'success').length ?? 0;
+  const failedCount = tradeResult?.results.filter((r) => r.status === 'failed').length ?? 0;
 
-        <Card className="mb-4">
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-bold">Execute Trade</h1>
+        <p className="text-sm text-muted">
+          Place a trade across {selectedCount} of {activeAccounts.length} active account{activeAccounts.length !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      {/* Top row: Accounts + Trade form side by side */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Left: Account selection */}
+        <Card>
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium">Select Accounts</span>
             <button
@@ -281,7 +287,7 @@ export default function TradePage(): React.JSX.Element {
                         <InlineRiskOverrideEditor
                           defaultType={override?.risk_type ?? getAccountDefaultRiskType(account)}
                           defaultValue={override?.risk_value ?? getAccountDefaultRiskValue(account)}
-                          onSave={(type, value) => setRiskOverride(account.id, type, value)}
+                          onSave={(type, value) => setRiskOverrideValue(account.id, type, value)}
                           onCancel={() => setEditingRiskId(null)}
                         />
                       ) : (
@@ -318,8 +324,15 @@ export default function TradePage(): React.JSX.Element {
               })}
             </div>
           )}
+
+          {selectedCount === 0 && activeAccounts.length > 0 && (
+            <p className="mt-3 text-center text-xs text-danger">
+              Select at least one account to execute the trade.
+            </p>
+          )}
         </Card>
 
+        {/* Right: Trade form */}
         <Card>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {errors.root && (
@@ -345,12 +358,7 @@ export default function TradePage(): React.JSX.Element {
                       : 'border-input-border text-muted hover:text-foreground'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    value="Market"
-                    className="sr-only"
-                    {...register('order_type')}
-                  />
+                  <input type="radio" value="Market" className="sr-only" {...register('order_type')} />
                   Market
                 </label>
                 <label
@@ -360,12 +368,7 @@ export default function TradePage(): React.JSX.Element {
                       : 'border-input-border text-muted hover:text-foreground'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    value="Limit"
-                    className="sr-only"
-                    {...register('order_type')}
-                  />
+                  <input type="radio" value="Limit" className="sr-only" {...register('order_type')} />
                   Limit
                 </label>
               </div>
@@ -381,12 +384,7 @@ export default function TradePage(): React.JSX.Element {
                       : 'border-input-border text-muted hover:text-foreground'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    value="Buy"
-                    className="sr-only"
-                    {...register('side')}
-                  />
+                  <input type="radio" value="Buy" className="sr-only" {...register('side')} />
                   Buy / Long
                 </label>
                 <label
@@ -396,69 +394,73 @@ export default function TradePage(): React.JSX.Element {
                       : 'border-input-border text-muted hover:text-foreground'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    value="Sell"
-                    className="sr-only"
-                    {...register('side')}
-                  />
+                  <input type="radio" value="Sell" className="sr-only" {...register('side')} />
                   Sell / Short
                 </label>
               </div>
               {errors.side && <p className="text-xs text-danger">{errors.side.message}</p>}
             </div>
 
-            <Input
-              label="Leverage"
-              type="number"
-              min={1}
-              max={100}
-              placeholder="10"
-              error={errors.leverage?.message}
-              {...register('leverage', { valueAsNumber: true })}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Leverage"
+                type="number"
+                min={1}
+                max={100}
+                placeholder="10"
+                error={errors.leverage?.message}
+                {...register('leverage', { valueAsNumber: true })}
+              />
+
+              {selectedOrderType === 'Limit' ? (
+                <div>
+                  <Input
+                    label="Entry Price"
+                    type="number"
+                    step="0.01"
+                    placeholder="Limit price"
+                    error={errors.entry_price?.message}
+                    {...register('entry_price', {
+                      setValueAs: (v: string) => (v === '' ? undefined : Number(v)),
+                    })}
+                  />
+                </div>
+              ) : (
+                <div />
+              )}
+            </div>
 
             {selectedOrderType === 'Limit' && (
-              <div>
-                <Input
-                  label="Entry Price"
-                  type="number"
-                  step="0.01"
-                  placeholder="Entry price for limit order"
-                  error={errors.entry_price?.message}
-                  {...register('entry_price', {
-                    setValueAs: (v: string) => (v === '' ? undefined : Number(v)),
-                  })}
-                />
-                <p className="mt-1 text-xs text-muted">
-                  {selectedSide === 'Buy'
-                    ? 'Set below market price to place a pending order'
-                    : 'Set above market price to place a pending order'}
-                </p>
-              </div>
+              <p className="text-xs text-muted -mt-2">
+                {selectedSide === 'Buy'
+                  ? 'Set below market price to place a pending order'
+                  : 'Set above market price to place a pending order'}
+              </p>
             )}
 
-            <Input
-              label="Stop Loss (optional)"
-              type="number"
-              step="0.01"
-              placeholder="Price"
-              error={errors.stop_loss?.message}
-              {...register('stop_loss', {
-                setValueAs: (v: string) => (v === '' ? undefined : Number(v)),
-              })}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Stop Loss"
+                type="number"
+                step="0.01"
+                placeholder="Optional"
+                error={errors.stop_loss?.message}
+                {...register('stop_loss', {
+                  setValueAs: (v: string) => (v === '' ? undefined : Number(v)),
+                })}
+              />
 
-            <Input
-              label="Take Profit (optional)"
-              type="number"
-              step="0.01"
-              placeholder="Price"
-              error={errors.take_profit?.message}
-              {...register('take_profit', {
-                setValueAs: (v: string) => (v === '' ? undefined : Number(v)),
-              })}
-            />
+              <Input
+                label="Take Profit"
+                type="number"
+                step="0.01"
+                placeholder="Optional"
+                error={errors.take_profit?.message}
+                {...register('take_profit', {
+                  setValueAs: (v: string) => (v === '' ? undefined : Number(v)),
+                })}
+              />
+            </div>
 
             <Button
               type="submit"
@@ -472,90 +474,76 @@ export default function TradePage(): React.JSX.Element {
                 ? 'Executing...'
                 : `Execute ${selectedOrderType} Order (${selectedCount} account${selectedCount !== 1 ? 's' : ''})`}
             </Button>
-
-            {selectedCount === 0 && activeAccounts.length > 0 && (
-              <p className="text-center text-xs text-danger">
-                Select at least one account to execute the trade.
-              </p>
-            )}
           </form>
         </Card>
       </div>
 
-      <div>
-        <div className="mb-6">
-          <h1 className="text-xl font-bold">Results</h1>
-          <p className="text-sm text-muted">Execution results per account</p>
-        </div>
+      {/* Bottom: Results spanning full width */}
+      {(tradeResult || executeMutation.isPending) && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Execution Results</h2>
 
-        {!tradeResult && !executeMutation.isPending && (
-          <Card className="text-center text-sm text-muted">
-            Submit a trade to see results here.
-          </Card>
-        )}
+          {executeMutation.isPending && (
+            <Card className="text-center">
+              <div className="flex flex-col items-center gap-3">
+                <svg className="h-8 w-8 animate-spin text-primary" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+                <p className="text-sm text-muted">Executing trades across accounts...</p>
+              </div>
+            </Card>
+          )}
 
-        {executeMutation.isPending && (
-          <Card className="text-center">
-            <div className="flex flex-col items-center gap-3">
-              <svg className="h-8 w-8 animate-spin text-primary" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-              </svg>
-              <p className="text-sm text-muted">Executing trades across accounts...</p>
-            </div>
-          </Card>
-        )}
+          {tradeResult && (
+            <>
+              <div className="mb-3 flex items-center gap-3 text-sm">
+                <span className="text-success font-medium">{successCount} succeeded</span>
+                <span className="text-card-border">|</span>
+                <span className="text-danger font-medium">{failedCount} failed</span>
+              </div>
 
-        {tradeResult && (
-          <div className="space-y-3">
-            {tradeResult.results.map((result) => (
-              <Card
-                key={result.account_id}
-                className={`border-l-4 ${
-                  result.status === 'success' ? 'border-l-success' : 'border-l-danger'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {tradeResult.results.map((result) => (
+                  <Card
+                    key={result.account_id}
+                    className={`border-l-4 ${
+                      result.status === 'success' ? 'border-l-success' : 'border-l-danger'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
                       {result.status === 'success' ? (
-                        <CheckCircle size={16} className="text-success" />
+                        <CheckCircle size={16} className="text-success shrink-0" />
                       ) : (
-                        <XCircle size={16} className="text-danger" />
+                        <XCircle size={16} className="text-danger shrink-0" />
                       )}
-                      <span className="font-medium">{result.account_name}</span>
+                      <span className="font-medium truncate">{result.account_name}</span>
                       <Badge variant={result.status === 'success' ? 'success' : 'danger'}>
                         {result.status}
                       </Badge>
-                      {result.balance && (
-                        <span className="text-xs text-muted">
-                          Balance: ${result.balance}
-                        </span>
-                      )}
                     </div>
 
+                    {result.balance && (
+                      <p className="text-xs text-muted mb-1">Balance: ${result.balance}</p>
+                    )}
+
                     {result.status === 'success' && (
-                      <div className="mt-2 space-y-0.5 text-xs text-muted">
-                        <p>Order ID: {result.order_id}</p>
-                        <p>Quantity: {result.quantity}</p>
+                      <div className="space-y-0.5 text-xs text-muted">
+                        <p>Order: <span className="font-mono">{result.order_id}</span></p>
+                        <p>Qty: {result.quantity}</p>
                       </div>
                     )}
 
                     {result.status === 'failed' && result.error_message && (
-                      <p className="mt-2 text-xs text-danger">{result.error_message}</p>
+                      <p className="text-xs text-danger">{result.error_message}</p>
                     )}
-                  </div>
-                </div>
-              </Card>
-            ))}
-
-            <div className="rounded-lg bg-card-border/30 px-4 py-3 text-center text-xs text-muted">
-              {tradeResult.results.filter((r) => r.status === 'success').length} succeeded,{' '}
-              {tradeResult.results.filter((r) => r.status === 'failed').length} failed
-            </div>
-          </div>
-        )}
-      </div>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
