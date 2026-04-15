@@ -9,6 +9,7 @@ export type AccountInsert = {
   risk_type: RiskType;
   risk_amount: number;
   risk_percent?: number | null;
+  proxy_url?: string | null;
   is_active?: boolean;
 };
 
@@ -40,6 +41,7 @@ export type AccountExecutionResult = {
   quantity?: string;
   balance?: string;
   error_message?: string;
+  used_ip?: string;
 };
 
 export type TradeResponse = {

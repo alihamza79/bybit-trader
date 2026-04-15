@@ -1,13 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useCreateAccount } from '@/hooks/useAccounts';
 import { accountSchema, type AccountFormData } from '@/lib/validations/account';
+import { testProxy, type ProxyTestResult } from '@/lib/api/accounts';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Shield, ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react';
 
 export default function NewAccountPage(): React.JSX.Element {
   const router = useRouter();
@@ -30,6 +33,24 @@ export default function NewAccountPage(): React.JSX.Element {
   });
 
   const riskType = useWatch({ control, name: 'risk_type' });
+  const proxyUrlValue = useWatch({ control, name: 'proxy_url' });
+  const [proxyTest, setProxyTest] = useState<(ProxyTestResult & { loading?: boolean }) | null>(null);
+
+  async function handleTestProxy(): Promise<void> {
+    setProxyTest({ direct_ip: '', proxy_ip: null, same_ip: null, loading: true });
+    try {
+      const result = await testProxy(proxyUrlValue ?? null);
+      setProxyTest({ ...result, loading: false });
+    } catch (err: unknown) {
+      setProxyTest({
+        direct_ip: '',
+        proxy_ip: null,
+        same_ip: null,
+        error: err instanceof Error ? err.message : 'Test failed',
+        loading: false,
+      });
+    }
+  }
 
   async function onSubmit(data: AccountFormData): Promise<void> {
     try {
@@ -40,6 +61,7 @@ export default function NewAccountPage(): React.JSX.Element {
         risk_type: data.risk_type,
         risk_amount: data.risk_amount ?? 100,
         risk_percent: data.risk_percent ?? null,
+        proxy_url: data.proxy_url || null,
       });
       router.push('/accounts');
     } catch (err: unknown) {
@@ -84,6 +106,49 @@ export default function NewAccountPage(): React.JSX.Element {
             error={errors.api_secret?.message}
             {...register('api_secret')}
           />
+
+          <div>
+            <Input
+              label="Proxy URL (optional)"
+              placeholder="socks5://127.0.0.1:1080 or http://user:pass@ip:port"
+              error={errors.proxy_url?.message}
+              {...register('proxy_url')}
+            />
+            {proxyUrlValue && (
+              <div className="mt-2 space-y-1.5">
+                <button
+                  type="button"
+                  onClick={handleTestProxy}
+                  disabled={proxyTest?.loading}
+                  className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors disabled:opacity-50"
+                >
+                  {proxyTest?.loading ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Shield size={12} />
+                  )}
+                  <span>{proxyTest?.loading ? 'Testing proxy...' : 'Test proxy connection'}</span>
+                </button>
+                {proxyTest && !proxyTest.loading && (
+                  <div className={`flex items-start gap-1.5 text-xs rounded-lg border px-3 py-2 ${
+                    proxyTest.error
+                      ? 'border-danger/20 bg-danger/10 text-danger'
+                      : proxyTest.same_ip
+                        ? 'border-danger/20 bg-danger/10 text-danger'
+                        : 'border-success/20 bg-success/10 text-success'
+                  }`}>
+                    {proxyTest.error ? (
+                      <><ShieldAlert size={14} className="shrink-0 mt-0.5" /><span>{proxyTest.error}</span></>
+                    ) : proxyTest.same_ip ? (
+                      <><ShieldAlert size={14} className="shrink-0 mt-0.5" /><span>Proxy NOT working — Your IP ({proxyTest.direct_ip}) matches proxy IP ({proxyTest.proxy_ip})</span></>
+                    ) : (
+                      <><ShieldCheck size={14} className="shrink-0 mt-0.5" /><span>Proxy working — Your IP: {proxyTest.direct_ip} → Proxy IP: {proxyTest.proxy_ip}</span></>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           <div>
             <label className="mb-1.5 block text-sm font-medium">Risk Mode</label>

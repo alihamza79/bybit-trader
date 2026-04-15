@@ -8,6 +8,7 @@ export const accountSchema = z
     risk_type: z.enum(['percent', 'amount']),
     risk_percent: z.number().min(0.1).max(100).optional().nullable(),
     risk_amount: z.number().min(1).max(1_000_000).optional().nullable(),
+    proxy_url: z.string().url('Must be a valid URL').optional().nullable().or(z.literal('')),
   })
   .refine(
     (data) =>

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { Navbar } from '@/components/features/Navbar';
+import { ProxyStatusProvider } from '@/components/ProxyStatusProvider';
 
 export default async function DashboardLayout({
   children,
@@ -17,7 +18,9 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen">
       <Navbar userEmail={user.email ?? ''} />
-      <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+      <ProxyStatusProvider>
+        <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+      </ProxyStatusProvider>
     </div>
   );
 }

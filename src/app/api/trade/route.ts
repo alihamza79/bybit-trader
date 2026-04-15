@@ -9,9 +9,11 @@ import {
   getLastPrice,
   calculatePositionSize,
   placeOrder,
+  resolveOutgoingIp,
 } from '@/lib/bybit';
 import { delay } from '@/lib/utils/delay';
 import { withRetry, extractErrorMessage } from '@/lib/utils/retry';
+import { verifyAccountProxies } from '@/lib/utils/proxy-check';
 import { TRADE_DELAY_MS } from '@/config/constants';
 import type { AccountExecutionResult } from '@/types';
 
@@ -56,6 +58,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'No active accounts found' }, { status: 400 });
     }
 
+    const proxyFailures = await verifyAccountProxies(accounts);
+
+    if (proxyFailures.size > 0) {
+      const allHaveProxy = accounts.every((a) => !!a.proxy_url);
+      const allFailed = proxyFailures.size === accounts.length;
+
+      if (allHaveProxy && allFailed) {
+        const details = accounts
+          .filter((a) => proxyFailures.has(a.id))
+          .map((a) => `${a.name}: ${proxyFailures.get(a.id)}`)
+          .join('; ');
+        return NextResponse.json(
+          { error: `All proxy verifications failed — trade blocked to protect accounts. ${details}` },
+          { status: 400 },
+        );
+      }
+    }
+
     const { data: tradeLog, error: logError } = await supabase
       .from('trade_logs')
       .insert({
@@ -87,10 +107,36 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       let result: AccountExecutionResult;
       let accountBalance: string | undefined;
 
+      const proxyError = proxyFailures.get(account.id);
+      if (proxyError) {
+        result = {
+          account_id: account.id,
+          account_name: account.name,
+          status: 'failed',
+          error_message: proxyError,
+        };
+
+        await supabase.from('trade_executions').insert({
+          trade_log_id: tradeLog.id,
+          account_id: result.account_id,
+          account_name: result.account_name,
+          status: result.status,
+          order_id: null,
+          quantity: null,
+          error_message: result.error_message ?? null,
+        });
+
+        results.push(result);
+        continue;
+      }
+
       try {
+        const usedIp = await resolveOutgoingIp(account.proxy_url);
+
         const client = createBybitClient({
           apiKey: account.api_key,
           apiSecret: account.api_secret,
+          proxyUrl: account.proxy_url,
         });
 
         const [walletInfo, symbolInfo, lastPrice] = await withRetry(() =>
@@ -152,6 +198,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           order_id: orderResult.orderId,
           quantity: orderResult.quantity,
           balance: accountBalance,
+          used_ip: usedIp,
         };
       } catch (err: unknown) {
         const errorMessage = extractErrorMessage(err);
@@ -161,6 +208,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           status: 'failed',
           balance: accountBalance,
           error_message: errorMessage,
+          used_ip: 'unknown',
         };
       }
 

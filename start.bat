@@ -1,8 +1,7 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 
 set PORT=4123
-set PID_FILE=%~dp0.server.pid
 set LOG_FILE=%~dp0.server.log
 
 set ACTION=%1
@@ -17,42 +16,49 @@ echo Usage: start.bat [start^|stop^|status]
 echo        start.bat          (toggle: start if stopped, stop if running)
 exit /b 1
 
+:get_pid
+set "PORT_PID="
+for /f "usebackq tokens=5" %%p in (`netstat -ano 2^>nul ^| findstr ":%PORT% " ^| findstr "LISTENING"`) do (
+    if "!PORT_PID!"=="" set "PORT_PID=%%p"
+)
+exit /b 0
+
 :is_running
-if not exist "%PID_FILE%" exit /b 1
-set /p SAVED_PID=<"%PID_FILE%"
-tasklist /FI "PID eq %SAVED_PID%" 2>nul | findstr /i "node" >nul 2>nul
-exit /b %ERRORLEVEL%
+call :get_pid
+if defined PORT_PID (exit /b 0) else (exit /b 1)
 
 :do_stop
 call :is_running
 if %ERRORLEVEL% equ 0 (
-    set /p SAVED_PID=<"%PID_FILE%"
-    taskkill /PID %SAVED_PID% /T /F >nul 2>nul
-    del "%PID_FILE%" >nul 2>nul
+    echo Stopping PID !PORT_PID!...
+    taskkill /PID !PORT_PID! /T /F >nul 2>nul
+    timeout /t 2 /nobreak >nul
+    call :is_running
+    if %ERRORLEVEL% equ 0 (
+        echo Warning: could not kill process on port %PORT%.
+        exit /b 1
+    )
     echo Stopped.
 ) else (
-    echo Not running.
-    del "%PID_FILE%" >nul 2>nul
+    echo Not running on port %PORT%.
 )
 exit /b 0
 
 :do_status
 call :is_running
 if %ERRORLEVEL% equ 0 (
-    set /p SAVED_PID=<"%PID_FILE%"
-    echo Running at http://localhost:%PORT% (PID %SAVED_PID%^)
+    echo Running at http://localhost:%PORT% (PID !PORT_PID!^)
 ) else (
     echo Not running.
-    del "%PID_FILE%" >nul 2>nul
 )
 exit /b 0
 
 :do_toggle
 call :is_running
 if %ERRORLEVEL% equ 0 (
-    set /p SAVED_PID=<"%PID_FILE%"
-    taskkill /PID %SAVED_PID% /T /F >nul 2>nul
-    del "%PID_FILE%" >nul 2>nul
+    echo Stopping PID !PORT_PID!...
+    taskkill /PID !PORT_PID! /T /F >nul 2>nul
+    timeout /t 2 /nobreak >nul
     echo Stopped.
     exit /b 0
 )
@@ -61,8 +67,7 @@ goto :do_start
 :do_start
 call :is_running
 if %ERRORLEVEL% equ 0 (
-    set /p SAVED_PID=<"%PID_FILE%"
-    echo Already running at http://localhost:%PORT% (PID %SAVED_PID%^)
+    echo Already running at http://localhost:%PORT% (PID !PORT_PID!^)
     exit /b 0
 )
 
@@ -99,32 +104,29 @@ echo Building...
 call pnpm build
 
 echo Starting on port %PORT%...
+start /b cmd /c "npx next start -p %PORT% > "%LOG_FILE%" 2>&1"
 
-start /b cmd /c "npx next start -p %PORT% > "%LOG_FILE%" 2>&1" & (
-    for /f "tokens=2" %%a in ('tasklist /v /fo list /fi "WINDOWTITLE eq npx" 2^>nul ^| findstr "PID"') do (
-        echo %%a> "%PID_FILE%"
-    )
-)
+set ATTEMPTS=0
+:wait_loop
+if %ATTEMPTS% geq 10 goto :start_failed
+timeout /t 1 /nobreak >nul
+set /a ATTEMPTS+=1
+call :is_running
+if %ERRORLEVEL% equ 0 goto :started
+goto :wait_loop
 
-timeout /t 3 /nobreak >nul
-
-for /f "usebackq tokens=5" %%p in (`netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"`) do (
-    echo %%p> "%PID_FILE%"
-    goto :started
-)
-
+:start_failed
 echo Failed to start. Check:
 echo   type %LOG_FILE%
-del "%PID_FILE%" >nul 2>nul
 exit /b 1
 
 :started
-set /p SAVED_PID=<"%PID_FILE%"
 echo.
-echo Running at http://localhost:%PORT%
+echo Running at http://localhost:%PORT% (PID !PORT_PID!^)
 echo.
 echo Commands:
 echo   start.bat           - toggle (start/stop^)
+echo   start.bat stop      - stop the server
 echo   start.bat status    - check if running
 echo   Logs: type .server.log
 exit /b 0

@@ -83,6 +83,49 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
+## Per-Account Proxy (for multiple CFT accounts)
+
+If you manage multiple accounts through services like Crypto Fund Trader that restrict one account per IP, you can assign a different proxy to each account so their API calls originate from different IPs.
+
+Leave Account 1's proxy field **empty** (uses your home IP). Set Account 2's **Proxy URL** to route through a different IP.
+
+### Option 1: Use a second device on a different network
+
+If you have a phone hotspot, a friend's Wi-Fi, or a second internet connection:
+
+1. Run a SOCKS5 proxy on the second network (e.g., a laptop on hotspot)
+2. Or use the SSH tunnel method below with any machine on a different IP
+
+### Option 2: SSH Tunnel through any VPS
+
+If you have access to **any** remote server (even a friend's PC with SSH):
+
+```bash
+ssh -D 1080 -N -f user@remote-server-ip
+```
+
+Then set Account 2's proxy URL to `socks5://127.0.0.1:1080`.
+
+### Option 3: Free residential proxy services
+
+Some services offer free SOCKS5/HTTP proxies. Quality varies, but for low-frequency trading API calls they can work:
+
+- [Webshare](https://www.webshare.io/) — 10 free proxies (no card required)
+- [ProxyScrape](https://proxyscrape.com/free-proxy-list) — free rotating list
+
+Set the proxy URL from the provider, e.g. `socks5://user:pass@proxy-host:port`.
+
+### Option 4: VPS with free tier (if you have a card)
+
+Providers like Oracle Cloud (Always Free), AWS Free Tier, or Google Cloud Free Tier give you a VPS with its own IP. Install [microsocks](https://github.com/rofl0r/microsocks) on it for a persistent SOCKS5 server.
+
+### Supported proxy formats
+
+- `socks5://host:port`
+- `socks5://user:pass@host:port`
+- `http://host:port`
+- `http://user:pass@host:port`
+
 ## Important Notes
 
 - This app uses **Bybit Demo Trading** (`api-demo.bybit.com`). API keys must be created from Bybit's Demo Trading mode.

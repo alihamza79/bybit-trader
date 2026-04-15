@@ -3,6 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server';
 import { createBybitClient, getPositions, closePosition, setPositionTpSl } from '@/lib/bybit';
 import { delay } from '@/lib/utils/delay';
 import { withRetry, extractErrorMessage } from '@/lib/utils/retry';
+import { verifyProxy, verifyAccountProxies } from '@/lib/utils/proxy-check';
 import { TRADE_DELAY_MS } from '@/config/constants';
 
 export async function GET(): Promise<NextResponse> {
@@ -24,6 +25,8 @@ export async function GET(): Promise<NextResponse> {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const proxyFailures = await verifyAccountProxies(accounts ?? []);
+
     const allPositions: Array<{
       account_id: string;
       account_name: string;
@@ -35,10 +38,22 @@ export async function GET(): Promise<NextResponse> {
       const account = accounts![i];
       if (i > 0) await delay(TRADE_DELAY_MS);
 
+      const proxyError = proxyFailures.get(account.id);
+      if (proxyError) {
+        allPositions.push({
+          account_id: account.id,
+          account_name: account.name,
+          positions: [],
+          error: proxyError,
+        });
+        continue;
+      }
+
       try {
         const client = createBybitClient({
           apiKey: account.api_key,
           apiSecret: account.api_secret,
+          proxyUrl: account.proxy_url,
         });
 
         const positions = await withRetry(() => getPositions(client), 2, 500);
@@ -93,9 +108,17 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
+    if (account.proxy_url) {
+      const proxyCheck = await verifyProxy(account.proxy_url);
+      if (!proxyCheck.ok) {
+        return NextResponse.json({ error: proxyCheck.error }, { status: 400 });
+      }
+    }
+
     const client = createBybitClient({
       apiKey: account.api_key,
       apiSecret: account.api_secret,
+      proxyUrl: account.proxy_url,
     });
 
     await withRetry(() => setPositionTpSl(client, {
@@ -138,9 +161,17 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
+    if (account.proxy_url) {
+      const proxyCheck = await verifyProxy(account.proxy_url);
+      if (!proxyCheck.ok) {
+        return NextResponse.json({ error: proxyCheck.error }, { status: 400 });
+      }
+    }
+
     const client = createBybitClient({
       apiKey: account.api_key,
       apiSecret: account.api_secret,
+      proxyUrl: account.proxy_url,
     });
 
     const orderId = await withRetry(() => closePosition(client, {

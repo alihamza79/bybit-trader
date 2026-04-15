@@ -3,39 +3,48 @@ set -e
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 PORT=4123
-PID_FILE="$APP_DIR/.server.pid"
 LOG_FILE="$APP_DIR/.server.log"
 
+get_pid_on_port() {
+  lsof -ti :"$PORT" 2>/dev/null | head -1
+}
+
 is_running() {
-  [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+  [ -n "$(get_pid_on_port)" ]
+}
+
+do_stop() {
+  local pids
+  pids=$(lsof -ti :"$PORT" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+    sleep 1
+    if is_running; then
+      echo "Warning: could not kill all processes on port $PORT"
+      exit 1
+    fi
+    echo "Stopped."
+  else
+    echo "Not running on port $PORT."
+  fi
 }
 
 case "${1:-toggle}" in
   stop)
-    if is_running; then
-      kill "$(cat "$PID_FILE")" 2>/dev/null
-      rm -f "$PID_FILE"
-      echo "Stopped."
-    else
-      echo "Not running."
-      rm -f "$PID_FILE"
-    fi
+    do_stop
     exit 0
     ;;
   status)
     if is_running; then
-      echo "Running at http://localhost:$PORT (PID $(cat "$PID_FILE"))"
+      echo "Running at http://localhost:$PORT (PID $(get_pid_on_port))"
     else
       echo "Not running."
-      rm -f "$PID_FILE"
     fi
     exit 0
     ;;
   toggle)
     if is_running; then
-      kill "$(cat "$PID_FILE")" 2>/dev/null
-      rm -f "$PID_FILE"
-      echo "Stopped."
+      do_stop
       exit 0
     fi
     ;;
@@ -46,6 +55,11 @@ case "${1:-toggle}" in
     exit 1
     ;;
 esac
+
+if is_running; then
+  echo "Already running at http://localhost:$PORT (PID $(get_pid_on_port))"
+  exit 0
+fi
 
 echo "=== Bybit Multi-Account Trader ==="
 
@@ -64,11 +78,6 @@ if [ ! -f "$APP_DIR/.env.local" ]; then
   exit 1
 fi
 
-if is_running; then
-  echo "Already running at http://localhost:$PORT (PID $(cat "$PID_FILE"))"
-  exit 0
-fi
-
 cd "$APP_DIR"
 
 echo "Installing dependencies..."
@@ -78,22 +87,23 @@ echo "Building..."
 pnpm build
 
 echo "Starting on port $PORT..."
-nohup npx next start -p $PORT > "$LOG_FILE" 2>&1 &
-echo $! > "$PID_FILE"
+nohup npx next start -p "$PORT" > "$LOG_FILE" 2>&1 &
 
-sleep 2
+for i in $(seq 1 10); do
+  sleep 1
+  if is_running; then
+    echo ""
+    echo "Running at http://localhost:$PORT (PID $(get_pid_on_port))"
+    echo ""
+    echo "Commands:"
+    echo "  ./start.sh           — toggle (start/stop)"
+    echo "  ./start.sh stop      — stop the server"
+    echo "  ./start.sh status    — check if running"
+    echo "  Logs: tail -f .server.log"
+    exit 0
+  fi
+done
 
-if is_running; then
-  echo ""
-  echo "Running at http://localhost:$PORT"
-  echo ""
-  echo "Commands:"
-  echo "  ./start.sh           — toggle (start/stop)"
-  echo "  ./start.sh status    — check if running"
-  echo "  Logs: tail -f .server.log"
-else
-  echo "Failed to start. Check:"
-  echo "  cat $LOG_FILE"
-  rm -f "$PID_FILE"
-  exit 1
-fi
+echo "Failed to start. Check:"
+echo "  cat $LOG_FILE"
+exit 1

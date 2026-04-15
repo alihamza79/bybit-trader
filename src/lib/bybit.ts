@@ -1,10 +1,15 @@
 import { RestClientV5, type OrderParamsV5 } from 'bybit-api';
+import { SocksProxyAgent } from 'socks-proxy-agent';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import http from 'node:http';
+import https from 'node:https';
 import type { TradeSide, OrderType } from '@/types';
 import { extractErrorMessage } from '@/lib/utils/retry';
 
 type BybitConfig = {
   apiKey: string;
   apiSecret: string;
+  proxyUrl?: string | null;
 };
 
 type OrderResult = {
@@ -20,15 +25,73 @@ async function bybitCall<T>(fn: () => Promise<T>, context: string): Promise<T> {
   }
 }
 
+function createProxyAgent(proxyUrl: string): http.Agent {
+  if (proxyUrl.startsWith('socks')) {
+    return new SocksProxyAgent(proxyUrl);
+  }
+  return new HttpsProxyAgent(proxyUrl);
+}
+
+export type BybitClientWithMeta = {
+  client: RestClientV5;
+  proxyUrl: string | null;
+};
+
 export function createBybitClient(config: BybitConfig): RestClientV5 {
   const baseUrl = process.env.BYBIT_BASE_URL;
+  const proxyUrl = config.proxyUrl?.trim() || null;
 
-  return new RestClientV5({
-    key: config.apiKey,
-    secret: config.apiSecret,
-    testnet: false,
-    demoTrading: true,
-    ...(baseUrl ? { baseUrl } : {}),
+  const requestOptions = proxyUrl
+    ? {
+        httpsAgent: createProxyAgent(proxyUrl),
+        httpAgent: createProxyAgent(proxyUrl),
+      }
+    : undefined;
+
+  return new RestClientV5(
+    {
+      key: config.apiKey,
+      secret: config.apiSecret,
+      testnet: false,
+      demoTrading: true,
+      ...(baseUrl ? { baseUrl } : {}),
+    },
+    requestOptions,
+  );
+}
+
+/**
+ * Resolves the outgoing IP by making a request through the same proxy agent
+ * that the Bybit client uses. Returns the IP as seen by the destination.
+ */
+export function resolveOutgoingIp(proxyUrl: string | null | undefined): Promise<string> {
+  const agent = proxyUrl ? createProxyAgent(proxyUrl) : undefined;
+
+  return new Promise((resolve) => {
+    const url = new URL('https://api.ipify.org?format=json');
+    const options: https.RequestOptions = {
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      method: 'GET',
+      agent: agent as unknown as http.Agent | undefined,
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(body) as { ip: string };
+          resolve(parsed.ip);
+        } catch {
+          resolve('unknown');
+        }
+      });
+    });
+
+    req.on('error', () => resolve('unknown'));
+    req.setTimeout(5000, () => { req.destroy(); resolve('unknown'); });
+    req.end();
   });
 }
 

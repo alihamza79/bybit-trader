@@ -12,6 +12,7 @@ import {
 import type { OpenOrderInfo } from '@/lib/bybit';
 import { delay } from '@/lib/utils/delay';
 import { withRetry, extractErrorMessage } from '@/lib/utils/retry';
+import { verifyAccountProxies } from '@/lib/utils/proxy-check';
 import { TRADE_DELAY_MS } from '@/config/constants';
 
 type OrderFingerprint = {
@@ -88,6 +89,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'No accounts found' }, { status: 404 });
     }
 
+    const proxyFailures = await verifyAccountProxies(accounts);
+
     const results: SyncResult[] = [];
     const { match } = body;
 
@@ -96,10 +99,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const account = accounts[i];
         if (i > 0) await delay(TRADE_DELAY_MS);
 
+        const proxyError = proxyFailures.get(account.id);
+        if (proxyError) {
+          results.push({ account_id: account.id, account_name: account.name, status: 'failed', error: proxyError });
+          continue;
+        }
+
         try {
           const client = createBybitClient({
             apiKey: account.api_key,
             apiSecret: account.api_secret,
+            proxyUrl: account.proxy_url,
           });
 
           if (account.id === body.source_account_id) {
@@ -138,10 +148,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const account = accounts[i];
         if (i > 0) await delay(TRADE_DELAY_MS);
 
+        const proxyError = proxyFailures.get(account.id);
+        if (proxyError) {
+          results.push({ account_id: account.id, account_name: account.name, status: 'failed', error: proxyError });
+          continue;
+        }
+
         try {
           const client = createBybitClient({
             apiKey: account.api_key,
             apiSecret: account.api_secret,
+            proxyUrl: account.proxy_url,
           });
 
           let targetOrderId: string;

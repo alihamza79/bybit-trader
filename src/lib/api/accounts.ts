@@ -61,3 +61,41 @@ export async function deleteAccount(id: string): Promise<void> {
     throw new Error(body.error ?? 'Failed to delete account');
   }
 }
+
+export type ProxyStatusItem = {
+  account_id: string;
+  account_name: string;
+  proxy_url: string;
+  status: 'ok' | 'failed';
+  error?: string;
+};
+
+export async function fetchProxyStatus(): Promise<ReadonlyArray<ProxyStatusItem>> {
+  const res = await fetch('/api/accounts/proxy-status');
+  if (!res.ok) {
+    const body = await res.json();
+    throw new Error(body.error ?? 'Failed to check proxy status');
+  }
+  return res.json();
+}
+
+export type ProxyTestResult = {
+  direct_ip: string;
+  proxy_ip: string | null;
+  same_ip: boolean | null;
+  message?: string;
+  error?: string;
+};
+
+export async function testProxy(proxyUrl: string | null): Promise<ProxyTestResult> {
+  const res = await fetch('/api/accounts/test-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ proxy_url: proxyUrl }),
+  });
+  if (!res.ok) {
+    const body = await res.json();
+    throw new Error(body.error ?? 'Proxy test failed');
+  }
+  return res.json();
+}

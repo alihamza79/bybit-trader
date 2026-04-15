@@ -56,6 +56,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         risk_type: parsed.data.risk_type,
         risk_amount: parsed.data.risk_amount ?? 100,
         risk_percent: parsed.data.risk_percent ?? null,
+        proxy_url: parsed.data.proxy_url ?? null,
         is_active: true,
       })
       .select()

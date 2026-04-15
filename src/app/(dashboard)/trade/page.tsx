@@ -13,8 +13,9 @@ import { Badge } from '@/components/ui/Badge';
 import { DEFAULT_SYMBOL } from '@/config/constants';
 import type { TradeResponse, Account, RiskType } from '@/types';
 import type { AccountBalance } from '@/lib/api/accounts';
-import { Zap, CheckCircle, XCircle, Pencil, Check, X, Wallet, RefreshCw } from 'lucide-react';
+import { Zap, CheckCircle, XCircle, Pencil, Check, X, Wallet, RefreshCw, ShieldAlert } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useProxyStatus } from '@/hooks/useProxyStatus';
 
 function InlineRiskOverrideEditor({
   defaultType,
@@ -99,6 +100,7 @@ export default function TradePage(): React.JSX.Element {
   const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
   const [editingRiskId, setEditingRiskId] = useState<string | null>(null);
   const updateAccountMutation = useUpdateAccount();
+  const { isAccountBlocked, getBlockReason } = useProxyStatus();
   const queryClient = useQueryClient();
 
   const [balancesEnabled, setBalancesEnabled] = useState(false);
@@ -278,29 +280,43 @@ export default function TradePage(): React.JSX.Element {
           ) : (
             <div className="space-y-2">
               {activeAccounts.map((account) => {
-                const isChecked = effectiveSelected.has(account.id);
+                const blocked = isAccountBlocked(account.id);
+                const blockReason = getBlockReason(account.id);
+                const isChecked = !blocked && effectiveSelected.has(account.id);
                 const isEditingThis = editingRiskId === account.id;
                 const bal = balances[account.id];
 
                 return (
                   <label
                     key={account.id}
-                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
-                      isChecked
-                        ? 'border-primary/40 bg-primary/5'
-                        : 'border-card-border hover:bg-input-bg/50'
+                    className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+                      blocked
+                        ? 'border-danger/40 bg-danger/5 cursor-not-allowed opacity-70'
+                        : isChecked
+                          ? 'border-primary/40 bg-primary/5 cursor-pointer'
+                          : 'border-card-border hover:bg-input-bg/50 cursor-pointer'
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={isChecked}
-                      onChange={() => toggleAccount(account.id)}
-                      className="h-4 w-4 rounded border-input-border text-primary accent-primary"
+                      onChange={() => { if (!blocked) toggleAccount(account.id); }}
+                      disabled={blocked}
+                      className="h-4 w-4 rounded border-input-border text-primary accent-primary disabled:opacity-40"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{account.name}</span>
+                        {blocked && (
+                          <span className="flex items-center gap-1 text-[10px] text-danger font-medium">
+                            <ShieldAlert size={10} />
+                            Proxy blocked
+                          </span>
+                        )}
                       </div>
+                      {blocked && blockReason && (
+                        <p className="text-[10px] text-danger/80 mt-0.5 truncate">{blockReason}</p>
+                      )}
                       {bal && bal.balance && (
                         <div className="flex items-center gap-2 text-[10px] mt-0.5">
                           <span className="text-muted">M:</span>
@@ -439,7 +455,7 @@ export default function TradePage(): React.JSX.Element {
                   <Input
                     label="Entry Price"
                     type="number"
-                    step="0.01"
+                    step="any"
                     placeholder="Limit price"
                     error={errors.entry_price?.message}
                     {...register('entry_price', {
@@ -464,7 +480,7 @@ export default function TradePage(): React.JSX.Element {
               <Input
                 label="Stop Loss"
                 type="number"
-                step="0.01"
+                step="any"
                 placeholder="Optional"
                 error={errors.stop_loss?.message}
                 {...register('stop_loss', {
@@ -475,7 +491,7 @@ export default function TradePage(): React.JSX.Element {
               <Input
                 label="Take Profit"
                 type="number"
-                step="0.01"
+                step="any"
                 placeholder="Optional"
                 error={errors.take_profit?.message}
                 {...register('take_profit', {
@@ -547,6 +563,12 @@ export default function TradePage(): React.JSX.Element {
 
                     {result.balance && (
                       <p className="text-xs text-muted mb-1">Balance: ${result.balance}</p>
+                    )}
+
+                    {result.used_ip && (
+                      <p className="text-xs text-muted mb-1">
+                        IP: <span className="font-mono">{result.used_ip}</span>
+                      </p>
                     )}
 
                     {result.status === 'success' && (

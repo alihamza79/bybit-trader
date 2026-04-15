@@ -20,6 +20,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          proxy_url: string | null
           risk_amount: number
           risk_percent: number | null
           risk_type: string
@@ -33,6 +34,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          proxy_url?: string | null
           risk_amount?: number
           risk_percent?: number | null
           risk_type?: string
@@ -46,6 +48,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          proxy_url?: string | null
           risk_amount?: number
           risk_percent?: number | null
           risk_type?: string

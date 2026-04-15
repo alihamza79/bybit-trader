@@ -21,7 +21,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams): Prom
     }
 
     const raw = body as Record<string, unknown>;
-    const allowedFields = ['name', 'api_key', 'api_secret', 'risk_type', 'risk_amount', 'risk_percent', 'is_active'] as const;
+    const allowedFields = ['name', 'api_key', 'api_secret', 'risk_type', 'risk_amount', 'risk_percent', 'proxy_url', 'is_active'] as const;
     const update: TablesUpdate<'bybit_accounts'> = { updated_at: new Date().toISOString() };
 
     for (const field of allowedFields) {
